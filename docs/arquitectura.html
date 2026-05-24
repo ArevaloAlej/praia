@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PRAIA · Arquitectura y despliegue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg: oklch(0.992 0.004 80);
+  --bg-sunken: oklch(0.97 0.005 80);
+  --bg-card: oklch(1 0 0);
+  --ink: oklch(0.18 0.008 80);
+  --ink-2: oklch(0.38 0.008 80);
+  --ink-3: oklch(0.55 0.008 80);
+  --ink-4: oklch(0.70 0.006 80);
+  --line: oklch(0.91 0.005 80);
+  --line-2: oklch(0.86 0.006 80);
+  --accent: oklch(0.55 0.10 220);
+  --accent-soft: oklch(0.94 0.025 220);
+  --accent-ink: oklch(0.32 0.08 220);
+  --crit: oklch(0.55 0.16 25);
+  --crit-soft: oklch(0.95 0.04 25);
+  --warn: oklch(0.62 0.13 70);
+  --warn-soft: oklch(0.96 0.04 70);
+  --ok: oklch(0.50 0.10 155);
+  --ok-soft: oklch(0.94 0.04 155);
+  --purple: oklch(0.55 0.10 280);
+  --purple-soft: oklch(0.95 0.03 280);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:'IBM Plex Sans', system-ui, sans-serif;
+  color:var(--ink); background:var(--bg);
+  font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',monospace}
+.serif{font-family:'IBM Plex Serif',serif}
+
+.shell{
+  display:grid;
+  grid-template-columns: 260px minmax(0,1fr);
+  max-width: 1320px;
+  margin:0 auto;
+}
+@media (max-width: 900px){ .shell{grid-template-columns: 1fr} aside.toc{display:none} }
+
+/* Sidebar */
+aside.toc{
+  border-right:1px solid var(--line);
+  padding:44px 24px 48px 32px;
+  position:sticky; top:0; height:100vh; overflow:auto;
+  background: linear-gradient(to bottom, var(--bg) 0%, var(--bg-sunken) 100%);
+}
+.brand{ display:flex; align-items:center; gap:10px; margin-bottom: 32px }
+.brand .dot{
+  width:24px; height:24px; border-radius:50%;
+  background: radial-gradient(circle at 30% 30%, oklch(0.75 0.10 220), var(--accent) 70%);
+  box-shadow: inset 0 0 0 1px oklch(0.40 0.08 220);
+}
+.brand .name{ font-weight:600; letter-spacing:-0.01em }
+.brand .name small{ display:block; font-weight:400; color:var(--ink-3); font-size:11px; letter-spacing: 0.08em; text-transform:uppercase; margin-top:2px }
+h6.toc-lbl{ font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-4); font-weight:600; margin:24px 0 10px }
+.toc ol{ list-style:none; padding:0; margin:0; counter-reset: tn }
+.toc ol li{ counter-increment: tn; margin: 1px 0 }
+.toc ol li a{
+  display:flex; align-items:baseline; gap:10px; text-decoration:none; color:var(--ink-2);
+  padding: 6px 8px; border-radius:6px; font-size:13.5px; line-height:1.35;
+  transition: background .12s, color .12s;
+}
+.toc ol li a::before{
+  content: counter(tn, decimal-leading-zero);
+  font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-4);
+  width:18px; flex-shrink:0;
+}
+.toc ol li a:hover{ background: var(--bg); color: var(--ink) }
+.toc ol li a.active{ background: var(--accent-soft); color: var(--accent-ink); font-weight:500 }
+.toc ol li a.active::before{ color:var(--accent-ink) }
+
+/* Main */
+main{ padding: 50px 60px 120px; max-width: 980px }
+@media (max-width: 900px){ main{padding: 28px 22px 60px} }
+
+.kicker{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:'IBM Plex Mono',monospace; font-size:11px;
+  letter-spacing:0.10em; text-transform:uppercase;
+  color: var(--accent-ink); background: var(--accent-soft);
+  padding: 5px 10px; border-radius: 999px; margin-bottom: 18px;
+}
+h1.title{
+  font-family:'IBM Plex Serif',serif; font-weight:500;
+  font-size: 40px; line-height:1.1; letter-spacing:-0.02em;
+  margin: 0 0 12px; text-wrap: balance;
+}
+.lede{ font-size:17px; color:var(--ink-2); max-width:680px; text-wrap: pretty }
+
+section.s{
+  padding: 52px 0 8px; scroll-margin-top: 24px;
+  border-top: 1px solid var(--line); margin-top: 8px;
+}
+section.s:first-of-type{ border-top:none }
+.s-num{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-4); letter-spacing:0.1em; margin-bottom:6px }
+section.s h2{
+  font-family:'IBM Plex Serif',serif; font-weight:500;
+  font-size:28px; letter-spacing:-0.015em;
+  margin: 0 0 8px; line-height:1.15;
+}
+section.s .lead{ color:var(--ink-2); font-size:15.5px; max-width:680px; margin: 0 0 24px; text-wrap:pretty }
+section.s h3{ font-size:15px; font-weight:600; margin: 28px 0 8px; letter-spacing:-0.005em }
+section.s p{ color:var(--ink-2); max-width:680px; text-wrap:pretty }
+section.s ul{ color:var(--ink-2); padding-left:20px; max-width:680px }
+section.s li{ margin: 4px 0 }
+section.s li::marker{ color:var(--ink-4) }
+
+/* Three pieces */
+.pieces{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0 6px }
+@media (max-width: 720px){ .pieces{ grid-template-columns: 1fr } }
+.piece{
+  background:var(--bg-card); border: 1px solid var(--line);
+  border-radius: 10px; padding: 16px 18px;
+}
+.piece .num{
+  font-family:'IBM Plex Mono',monospace;
+  background: var(--accent-soft); color: var(--accent-ink);
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 10px; letter-spacing: 0.1em; margin-bottom: 8px;
+}
+.piece h4{ margin: 0 0 4px; font-size: 14.5px; font-weight: 600 }
+.piece p{ margin: 0; font-size: 13px; color: var(--ink-3) }
+
+/* Path cards */
+.paths{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0 }
+@media (max-width: 800px){ .paths{ grid-template-columns: 1fr } }
+.path{
+  background: var(--bg-card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 22px 24px;
+  display: flex; flex-direction: column; gap: 12px;
+  position: relative;
+}
+.path.featured{
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px -12px oklch(0.4 0.06 220 / 0.30);
+}
+.path-tag{
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family:'IBM Plex Mono',monospace; font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  background: var(--bg-sunken); color: var(--ink-3);
+  padding: 3px 8px; border-radius: 4px; align-self: flex-start;
+}
+.path.featured .path-tag{ background: var(--accent-soft); color: var(--accent-ink) }
+.path h3{ margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.005em }
+.path .h-sub{ font-size: 13px; color: var(--ink-3); margin: 0 }
+.path .h-stack{
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 10px 0;
+  border-top: 1px dashed var(--line);
+  border-bottom: 1px dashed var(--line);
+}
+.stack-pill{
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family:'IBM Plex Mono',monospace; font-size: 11px;
+  background: var(--bg-sunken); color: var(--ink-2);
+  padding: 3px 8px; border-radius: 4px;
+}
+.stack-pill .ico{ font-size: 10px; color: var(--accent-ink) }
+.path .pros, .path .cons{ margin: 0; padding-left: 18px; font-size: 13px }
+.path .pros li{ color: var(--ink-2) }
+.path .cons li{ color: var(--ink-3) }
+.path .pros li::marker{ color: var(--ok) }
+.path .cons li::marker{ color: var(--warn) }
+.path-foot{
+  margin-top: auto; padding-top: 12px;
+  display: flex; justify-content: space-between; gap: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--ink-3); font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Architecture diagram */
+.arch-diagram{
+  background: var(--bg-card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 28px;
+  margin: 20px 0;
+  display: grid;
+  grid-template-columns: 1fr 60px 1fr 60px 1fr;
+  gap: 0; align-items: stretch;
+}
+@media (max-width: 800px){
+  .arch-diagram{ grid-template-columns: 1fr; gap: 12px }
+  .arch-diagram .arrow{ transform: rotate(90deg); width: 60px; height: 60px; justify-self: center }
+}
+.arch-node{
+  background: var(--bg-sunken); border: 1.5px solid var(--line);
+  border-radius: 10px; padding: 16px;
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+}
+.arch-node.accent{ border-color: var(--accent); background: var(--accent-soft) }
+.arch-node.purple{ border-color: var(--purple); background: var(--purple-soft) }
+.arch-node.green{ border-color: var(--ok); background: var(--ok-soft) }
+.arch-node h5{
+  margin: 0; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 600;
+}
+.arch-node .label{ font-size: 14.5px; font-weight: 600 }
+.arch-node .desc{ font-size: 11.5px; color: var(--ink-3) }
+.arch-node .tech{
+  font-family:'IBM Plex Mono',monospace; font-size: 10.5px;
+  color: var(--ink-3); padding: 3px 7px;
+  background: var(--bg-card); border-radius: 4px;
+  margin-top: 4px;
+}
+.arrow{
+  display: grid; place-items: center; color: var(--ink-3);
+  font-family:'IBM Plex Mono',monospace; font-size: 22px;
+}
+.arrow .lbl{ font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); margin-top: 6px }
+
+/* Auth flow */
+.auth-flow{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 16px 0 }
+@media (max-width: 720px){ .auth-flow{ grid-template-columns: 1fr; gap: 12px } }
+.auth-step{
+  background: var(--bg-card); border: 1px solid var(--line);
+  border-radius: 8px; padding: 12px;
+  display: flex; flex-direction: column; gap: 5px;
+  position: relative;
+}
+.auth-step::after{
+  content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-4); font-family:'IBM Plex Mono',monospace; font-size: 14px; z-index: 1;
+}
+.auth-step:last-child::after{ display: none }
+@media (max-width: 720px){ .auth-step::after{ display: none } }
+.auth-step .step-n{
+  font-family:'IBM Plex Mono',monospace; font-size: 10px;
+  color: var(--accent-ink); background: var(--accent-soft);
+  padding: 2px 6px; border-radius: 3px; align-self: flex-start;
+  letter-spacing: 0.08em;
+}
+.auth-step h5{ margin: 0; font-size: 13px; font-weight: 600 }
+.auth-step p{ margin: 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.4 }
+
+/* Roles matrix */
+.roles{ width: 100%; border-collapse: separate; border-spacing: 0; margin: 16px 0; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.roles th, .roles td{ padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle }
+.roles th{ background: var(--bg-sunken); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3) }
+.roles tr:last-child td{ border-bottom: none }
+.roles .check{ color: var(--ok); font-family:'IBM Plex Mono', monospace; font-weight: 600 }
+.roles .none{ color: var(--ink-4); font-family:'IBM Plex Mono',monospace }
+.roles .partial{ color: var(--warn); font-family:'IBM Plex Mono', monospace }
+
+/* Audit log mock */
+.audit-mock{
+  background: var(--bg-card); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden;
+  margin: 14px 0;
+  font-family:'IBM Plex Mono', monospace; font-size: 12px;
+}
+.audit-mock-head{
+  background: var(--bg-sunken);
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between;
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+}
+.audit-row{
+  display: grid; grid-template-columns: 120px 90px 100px 1fr;
+  gap: 12px; padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px; align-items: center;
+}
+.audit-row:last-child{ border-bottom: none }
+.audit-row .ts{ color: var(--ink-3); font-size: 11px }
+.audit-row .actor{ font-weight: 600; color: var(--ink) }
+.audit-row .verb{ font-size: 10.5px; padding: 2px 6px; border-radius: 3px; text-align: center; font-weight: 600 }
+.audit-row .verb.create{ background: var(--ok-soft); color: var(--ok) }
+.audit-row .verb.update{ background: var(--accent-soft); color: var(--accent-ink) }
+.audit-row .verb.delete{ background: var(--crit-soft); color: var(--crit) }
+.audit-row .verb.login{ background: var(--bg-sunken); color: var(--ink-3) }
+.audit-row .body{ color: var(--ink-2); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.audit-row .body .delta{ color: var(--ink-4) }
+.audit-row .body strong{ color: var(--ink); font-weight: 600 }
+
+/* Cost cards */
+.costs{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 }
+@media (max-width: 720px){ .costs{ grid-template-columns: 1fr } }
+.cost{
+  background: var(--bg-card); border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px 16px;
+}
+.cost .ct-label{ font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); font-weight: 600; margin-bottom: 6px }
+.cost .ct-val{ font-family:'IBM Plex Serif', serif; font-weight: 500; font-size: 22px; letter-spacing: -0.01em; line-height: 1.1 }
+.cost .ct-sub{ font-size: 11.5px; color: var(--ink-3); margin-top: 4px; font-family:'IBM Plex Mono', monospace }
+
+/* Step list */
+.steps-list{ counter-reset: stp; display: grid; gap: 8px; margin: 12px 0 }
+.step-row{
+  counter-increment: stp;
+  display: grid; grid-template-columns: 32px 1fr;
+  gap: 12px; align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg-card);
+}
+.step-row::before{
+  content: counter(stp, decimal-leading-zero);
+  font-family:'IBM Plex Mono', monospace; font-weight: 500;
+  background: var(--accent); color: white;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 10.5px;
+}
+.step-row .what{ font-weight: 600; font-size: 14px; margin-bottom: 2px }
+.step-row .why{ font-size: 12.5px; color: var(--ink-3); line-height: 1.5 }
+.step-row .why code{
+  font-family:'IBM Plex Mono', monospace; font-size: 11.5px;
+  background: var(--bg-sunken); border-radius: 3px; padding: 1px 5px; color: var(--ink-2);
+}
+
+/* Callout */
+.callout{
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 14px 18px;
+  border-radius: 0 8px 8px 0;
+  margin: 18px 0;
+  font-size: 13.5px;
+}
+.callout strong{ color: var(--accent-ink) }
+.callout.warn{ border-color: var(--warn); background: var(--warn-soft) }
+.callout.warn strong{ color: oklch(0.45 0.13 70) }
+
+/* Code block */
+pre.code{
+  background: oklch(0.18 0.008 80); color: oklch(0.92 0.005 80);
+  padding: 14px 16px; border-radius: 8px;
+  font-family:'IBM Plex Mono', monospace; font-size: 12px;
+  line-height: 1.55; overflow-x: auto;
+  margin: 12px 0;
+}
+pre.code .kw{ color: oklch(0.75 0.10 220) }
+pre.code .str{ color: oklch(0.75 0.10 155) }
+pre.code .com{ color: oklch(0.55 0.005 80) }
+pre.code .fn{ color: oklch(0.78 0.10 75) }
+
+footer{
+  margin-top: 64px; padding-top: 24px;
+  border-top: 1px solid var(--line);
+  color:var(--ink-4); font-size:12px;
+  font-family:'IBM Plex Mono',monospace;
+  display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;
+}
+
+::selection{ background: var(--accent-soft); color: var(--accent-ink) }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <aside class="toc">
+    <div class="brand">
+      <div class="dot"></div>
+      <div class="name">PRAIA<small>arquitectura · v1</small></div>
+    </div>
+
+    <h6 class="toc-lbl">Documento</h6>
+    <div class="toc"><ol id="toc-list">
+      <li><a href="#piezas">Las 3 piezas</a></li>
+      <li><a href="#paths">Dos caminos</a></li>
+      <li><a href="#arq-rapida">Camino A · rápido</a></li>
+      <li><a href="#arq-pro">Camino B · profesional</a></li>
+      <li><a href="#auth">Login del equipo</a></li>
+      <li><a href="#roles">Roles y permisos</a></li>
+      <li><a href="#audit">Trazabilidad</a></li>
+      <li><a href="#deploy">Compartir con el equipo</a></li>
+      <li><a href="#costos">Costos estimados</a></li>
+      <li><a href="#plan">Plan recomendado</a></li>
+    </ol></div>
+  </aside>
+
+  <main>
+
+    <span class="kicker">Arquitectura &amp; despliegue</span>
+    <h1 class="title">Cómo conectar PRAIA Desktop a tu data real y compartirla con tu equipo.</h1>
+    <p class="lede">Dos caminos según prisa y madurez. Mismo prototipo, distinto motor por debajo. Te explico qué cambia, cómo se loguea la gente, dónde ves quién hizo qué — y cómo lo pones en producción esta semana.</p>
+
+    <!-- ─────────────────  01 PIEZAS  ───────────────── -->
+    <section class="s" id="piezas">
+      <div class="s-num">01 — Las 3 piezas</div>
+      <h2>Una app web siempre se compone de tres cosas.</h2>
+      <p class="lead">Hoy AppSheet te las da todas en una sola caja negra. Cuando migras a una app propia las separas — eso es lo que da el control que la app actual no tiene.</p>
+
+      <div class="pieces">
+        <div class="piece">
+          <span class="num">PIEZA 1</span>
+          <h4>Datos</h4>
+          <p>Dónde vive realmente la información: tickets, apartamentos, agentes. Hoy: Google Sheet. Mañana: Sheet o base de datos.</p>
+        </div>
+        <div class="piece">
+          <span class="num">PIEZA 2</span>
+          <h4>Autenticación</h4>
+          <p>Quién puede entrar y qué puede ver/hacer. Login, sesiones, roles, MFA, recuperar contraseña.</p>
+        </div>
+        <div class="piece">
+          <span class="num">PIEZA 3</span>
+          <h4>App (UI)</h4>
+          <p>Lo que ves hoy en <span class="mono">PRAIA Desktop.html</span>. Vive en un servidor de hosting estático; cualquiera con el link la ve.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────  02 PATHS  ───────────────── -->
+    <section class="s" id="paths">
+      <div class="s-num">02 — Dos caminos</div>
+      <h2>Rápido y barato, o robusto y escalable.</h2>
+      <p class="lead">Ambos llevan a una app web real que tu equipo usa todos los días. El A se monta en 1–2 días si eres ágil. El B en 1–2 semanas y aguanta crecimiento.</p>
+
+      <div class="paths">
+        <div class="path">
+          <span class="path-tag">CAMINO A · rápido</span>
+          <h3>Google Sheets + Apps Script</h3>
+          <p class="h-sub">Mantienes la Sheet "Tickets" como base de datos. Apps Script la expone como API. La app es la que ya viste.</p>
+          <div class="h-stack">
+            <span class="stack-pill"><span class="ico">●</span> Google Sheet</span>
+            <span class="stack-pill"><span class="ico">●</span> Apps Script</span>
+            <span class="stack-pill"><span class="ico">●</span> Google OAuth</span>
+            <span class="stack-pill"><span class="ico">●</span> Netlify / Vercel</span>
+          </div>
+          <ul class="pros">
+            <li>Listo en 1–2 días</li>
+            <li>Cero costo · cuota Google ya incluida</li>
+            <li>Mantén tu workflow actual con Sheets</li>
+            <li>Login con cuenta Google de tu empresa</li>
+          </ul>
+          <ul class="cons">
+            <li>Lento con &gt;5 000 filas o &gt;20 usuarios simultáneos</li>
+            <li>Auditoría limitada (depende de "Versiones" de Sheets)</li>
+            <li>Apps Script tiene cuotas duras (6 min/ejecución)</li>
+          </ul>
+          <div class="path-foot">
+            <span>tiempo · 1–2 días</span>
+            <span>costo · $0/mes</span>
+          </div>
+        </div>
+
+        <div class="path featured">
+          <span class="path-tag">CAMINO B · profesional · recomendado</span>
+          <h3>Supabase + Vercel</h3>
+          <p class="h-sub">Migras la Sheet a una base Postgres con auth, audit, realtime y API gratis. Tu data crece sin frenos.</p>
+          <div class="h-stack">
+            <span class="stack-pill"><span class="ico">●</span> Supabase (Postgres)</span>
+            <span class="stack-pill"><span class="ico">●</span> Supabase Auth</span>
+            <span class="stack-pill"><span class="ico">●</span> Vercel</span>
+            <span class="stack-pill"><span class="ico">●</span> Row-level security</span>
+          </div>
+          <ul class="pros">
+            <li>Auditoría completa por fila (quién, qué, cuándo)</li>
+            <li>Roles y permisos finos (RLS de Postgres)</li>
+            <li>Realtime: el dashboard se actualiza solo</li>
+            <li>Escala a millones de filas sin problema</li>
+            <li>Backups automáticos</li>
+          </ul>
+          <ul class="cons">
+            <li>Requiere migrar la Sheet → tabla Postgres (1 vez)</li>
+            <li>Curva inicial mayor</li>
+          </ul>
+          <div class="path-foot">
+            <span>tiempo · 1–2 semanas</span>
+            <span>costo · $0–25/mes</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Mi recomendación:</strong> empieza por el <strong>Camino A</strong> esta semana para tener al equipo usándolo ya, y migra a Supabase en 1–2 meses cuando sepas qué funciona y qué hay que ajustar. El frontend (la app que ya viste) <em>no cambia</em> entre los dos caminos — solo cambia qué llama por detrás.
+      </div>
+    </section>
+
+    <!-- ─────────────────  03 ARQ RAPIDA  ───────────────── -->
+    <section class="s" id="arq-rapida">
+      <div class="s-num">03 — Camino A · rápido</div>
+      <h2>Google Sheets como base de datos, Apps Script como API.</h2>
+      <p class="lead">Tu Sheet "Tickets" sigue siendo la fuente de verdad. Apps Script publica un endpoint que la app consulta. Todo se queda en tu workspace de Google.</p>
+
+      <div class="arch-diagram">
+        <div class="arch-node green">
+          <h5>Datos</h5>
+          <span class="label">Google Sheet</span>
+          <span class="desc">Hojas: Tickets · Apartamentos · Agentes · Audit_Log</span>
+          <span class="tech">sheets.google.com</span>
+        </div>
+        <div class="arrow">→<span class="lbl">REST</span></div>
+        <div class="arch-node accent">
+          <h5>API</h5>
+          <span class="label">Apps Script</span>
+          <span class="desc">Web App que expone <span class="mono">/getTickets</span>, <span class="mono">/createTicket</span>, etc.</span>
+          <span class="tech">script.google.com</span>
+        </div>
+        <div class="arrow">→<span class="lbl">fetch</span></div>
+        <div class="arch-node purple">
+          <h5>App</h5>
+          <span class="label">PRAIA Desktop</span>
+          <span class="desc">El HTML que ya viste, alojado en hosting estático con dominio propio.</span>
+          <span class="tech">praia.tudominio.com</span>
+        </div>
+      </div>
+
+      <h3>Cómo se ve un endpoint en Apps Script</h3>
+<pre class="code"><span class="com">// En tu Sheet → Extensions → Apps Script</span>
+<span class="kw">function</span> <span class="fn">doGet</span>(e) {
+  <span class="kw">const</span> sheet = SpreadsheetApp.getActive().getSheetByName(<span class="str">'Tickets'</span>);
+  <span class="kw">const</span> rows = sheet.getDataRange().getValues();
+  <span class="kw">const</span> headers = rows.shift();
+  <span class="kw">const</span> tickets = rows.map(r =&gt; Object.fromEntries(headers.map((h,i) =&gt; [h, r[i]])));
+  <span class="kw">return</span> ContentService
+    .createTextOutput(JSON.stringify(tickets))
+    .setMimeType(ContentService.MimeType.JSON);
+}</pre>
+
+      <p>Lo publicas con <strong>Deploy → New deployment → Web app</strong>, eliges "ejecutar como yo" + "acceso: dominio de mi organización" y obtienes una URL. La app le pega ahí. Listo.</p>
+    </section>
+
+    <!-- ─────────────────  04 ARQ PRO  ───────────────── -->
+    <section class="s" id="arq-pro">
+      <div class="s-num">04 — Camino B · profesional</div>
+      <h2>Supabase como cerebro de PRAIA.</h2>
+      <p class="lead">Supabase te da Postgres + Auth + API + audit + realtime <em>en un solo dashboard</em>. Es lo que usan startups que arrancan en serio.</p>
+
+      <div class="arch-diagram">
+        <div class="arch-node green">
+          <h5>Datos + Auth</h5>
+          <span class="label">Supabase</span>
+          <span class="desc">Postgres con tablas: tickets, apartments, agents, audit_log, users.</span>
+          <span class="tech">supabase.com</span>
+        </div>
+        <div class="arrow">→<span class="lbl">REST + WS</span></div>
+        <div class="arch-node accent">
+          <h5>Cliente JS</h5>
+          <span class="label">Supabase SDK</span>
+          <span class="desc">Llamadas directas seguras desde el browser. RLS protege qué ve cada usuario.</span>
+          <span class="tech">@supabase/supabase-js</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="arch-node purple">
+          <h5>App</h5>
+          <span class="label">PRAIA Desktop</span>
+          <span class="desc">El mismo HTML, alojado en Vercel.</span>
+          <span class="tech">praia.tudominio.com</span>
+        </div>
+      </div>
+
+      <h3>Modelo de datos sugerido</h3>
+<pre class="code"><span class="com">-- Tablas mínimas</span>
+<span class="kw">create table</span> users     (id uuid pk, email, name, role, shift, created_at);
+<span class="kw">create table</span> buildings (id text pk, name, address, units int);
+<span class="kw">create table</span> apartments(id text pk, building_id ref buildings, beds, baths, capacity);
+<span class="kw">create table</span> tickets   (id uuid pk, status, priority, platform, issue,
+                         apartment_id ref apartments, guest_name,
+                         agent_id ref users, description,
+                         created_at, updated_at, closed_at, sla_deadline);
+<span class="kw">create table</span> comments  (id uuid pk, ticket_id ref tickets, author_id ref users, body, created_at);
+<span class="kw">create table</span> audit_log (id, table_name, row_id, action, actor_id, before, after, ts);</pre>
+
+      <h3>Lo que ganas inmediatamente</h3>
+      <ul>
+        <li><strong>Realtime.</strong> Cuando Luis cierra un ticket, María lo ve actualizado <em>al instante</em> sin recargar.</li>
+        <li><strong>RLS (Row-Level Security).</strong> Un agente de "Limpieza" no ve tickets de "Mantenimiento" — la base misma lo bloquea.</li>
+        <li><strong>Audit log automático.</strong> Un trigger de Postgres logea cada INSERT/UPDATE/DELETE.</li>
+        <li><strong>API REST gratis.</strong> Cualquier sistema externo (Guesty, Zapier, etc.) puede consultar tickets vía API.</li>
+      </ul>
+    </section>
+
+    <!-- ─────────────────  05 AUTH  ───────────────── -->
+    <section class="s" id="auth">
+      <div class="s-num">05 — Login</div>
+      <h2>Así entra tu equipo a PRAIA.</h2>
+      <p class="lead">Opción simple: cuentas Google ya existentes (Workspace). Opción flexible: email + contraseña o magic link sin tener que crear cuentas Google.</p>
+
+      <div class="auth-flow">
+        <div class="auth-step">
+          <span class="step-n">PASO 01</span>
+          <h5>Visitan praia.tudominio.com</h5>
+          <p>Pantalla de login si no hay sesión.</p>
+        </div>
+        <div class="auth-step">
+          <span class="step-n">PASO 02</span>
+          <h5>"Entrar con Google"</h5>
+          <p>O email + contraseña en Camino B.</p>
+        </div>
+        <div class="auth-step">
+          <span class="step-n">PASO 03</span>
+          <h5>Validación</h5>
+          <p>El backend chequea email contra la tabla <span class="mono">users</span>.</p>
+        </div>
+        <div class="auth-step">
+          <span class="step-n">PASO 04</span>
+          <h5>Asigna rol</h5>
+          <p>Supervisor, Operaciones, Limpieza, Mantenimiento.</p>
+        </div>
+        <div class="auth-step">
+          <span class="step-n">PASO 05</span>
+          <h5>Entra a la app</h5>
+          <p>Ve únicamente lo que su rol permite.</p>
+        </div>
+      </div>
+
+      <h3>Onboarding de un agente nuevo</h3>
+      <ol>
+        <li>Vas a <strong>Ajustes → Equipo → Invitar</strong>.</li>
+        <li>Pones email + rol + turno. Sistema le manda magic link.</li>
+        <li>Clic, queda dentro. Sin contraseñas que recordar.</li>
+      </ol>
+
+      <div class="callout warn">
+        <strong>Importante:</strong> el email del usuario es la clave de identidad en ambos caminos. Cada acción quedará registrada con ese email — eso es la base de la trazabilidad.
+      </div>
+    </section>
+
+    <!-- ─────────────────  06 ROLES  ───────────────── -->
+    <section class="s" id="roles">
+      <div class="s-num">06 — Roles</div>
+      <h2>Quién puede ver y hacer qué.</h2>
+      <p class="lead">Matriz sugerida — afinable. La idea es separar capacidades para que un agente operativo no pueda borrar tickets ni cambiar configuración.</p>
+
+      <table class="roles">
+        <thead>
+          <tr>
+            <th>Acción</th>
+            <th>Admin</th>
+            <th>Supervisor</th>
+            <th>Operaciones</th>
+            <th>Limpieza · Mant.</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Ver todos los tickets</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="partial">solo asignados</td></tr>
+          <tr><td>Crear ticket</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>Asignar a otro agente</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="none">—</td></tr>
+          <tr><td>Cambiar estado / cerrar</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>Editar ticket existente</td><td class="check">✓</td><td class="check">✓</td><td class="partial">solo propios</td><td class="partial">solo propios</td></tr>
+          <tr><td>Eliminar ticket</td><td class="check">✓</td><td class="check">✓</td><td class="none">—</td><td class="none">—</td></tr>
+          <tr><td>Ver métricas / reportes</td><td class="check">✓</td><td class="check">✓</td><td class="partial">solo propios</td><td class="partial">solo propios</td></tr>
+          <tr><td>Gestionar usuarios</td><td class="check">✓</td><td class="none">—</td><td class="none">—</td><td class="none">—</td></tr>
+          <tr><td>Configurar apartamentos</td><td class="check">✓</td><td class="check">✓</td><td class="none">—</td><td class="none">—</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ─────────────────  07 AUDIT  ───────────────── -->
+    <section class="s" id="audit">
+      <div class="s-num">07 — Trazabilidad</div>
+      <h2>Dónde ves quién hizo qué y cuándo.</h2>
+      <p class="lead">Cada acción importante deja huella. Lo encuentras en una vista <strong>Auditoría</strong> dentro de Ajustes — filtrable por usuario, fecha, tipo de acción, y entidad afectada (ticket, apartamento, usuario).</p>
+
+      <div class="audit-mock">
+        <div class="audit-mock-head">
+          <span>Audit log · últimas 8 entradas</span>
+          <span>tiempo real</span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 18:32</span>
+          <span class="actor">María P.</span>
+          <span class="verb update">UPDATE</span>
+          <span class="body"><strong>TK-1042</strong> · estado: <span class="delta">abierto → proceso</span></span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 18:30</span>
+          <span class="actor">Luis M.</span>
+          <span class="verb create">CREATE</span>
+          <span class="body"><strong>TK-1042</strong> · apto 7834-3 · issue Plomería</span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 18:25</span>
+          <span class="actor">Carla O.</span>
+          <span class="verb update">UPDATE</span>
+          <span class="body"><strong>TK-1031</strong> · agente: <span class="delta">Luis → José</span></span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 18:21</span>
+          <span class="actor">José C.</span>
+          <span class="verb update">UPDATE</span>
+          <span class="body"><strong>TK-1029</strong> · estado: <span class="delta">proceso → cerrado</span></span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 18:14</span>
+          <span class="actor">María P.</span>
+          <span class="verb delete">DELETE</span>
+          <span class="body"><strong>TK-1018</strong> · razón: duplicado de TK-1015</span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 18:05</span>
+          <span class="actor">Diego S.</span>
+          <span class="verb login">LOGIN</span>
+          <span class="body">sesión iniciada · IP 190.92.x.x · Mac · Chrome</span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 17:58</span>
+          <span class="actor">Ana R.</span>
+          <span class="verb update">UPDATE</span>
+          <span class="body"><strong>TK-1012</strong> · prioridad: <span class="delta">media → alta</span></span>
+        </div>
+        <div class="audit-row">
+          <span class="ts">24-05 17:42</span>
+          <span class="actor">María P.</span>
+          <span class="verb create">CREATE</span>
+          <span class="body"><strong>USER</strong> Diego Soto · rol Mantenimiento · turno Tarde</span>
+        </div>
+      </div>
+
+      <h3>Cómo se logea esto</h3>
+      <ul>
+        <li><strong>Camino A:</strong> cada llamada de la app a Apps Script escribe una fila en una hoja <span class="mono">Audit_Log</span> de la misma Google Sheet. Además Sheets ya tiene historial nativo (Archivo → Historial de versiones).</li>
+        <li><strong>Camino B:</strong> un <strong>trigger de Postgres</strong> en cada tabla escribe automáticamente a <span class="mono">audit_log</span> en cada INSERT/UPDATE/DELETE, con campos <span class="mono">before</span> y <span class="mono">after</span> en JSON. Súper consultable.</li>
+      </ul>
+    </section>
+
+    <!-- ─────────────────  08 DEPLOY  ───────────────── -->
+    <section class="s" id="deploy">
+      <div class="s-num">08 — Compartir</div>
+      <h2>Cómo se lo entregas al equipo.</h2>
+      <p class="lead">El HTML que ya tienes se sube a un hosting estático y queda detrás de tu dominio. Cada miembro entra desde su navegador — mismo link, distinta vista según su rol.</p>
+
+      <div class="steps-list">
+        <div class="step-row">
+          <div>
+            <div class="what">Comprar dominio (opcional)</div>
+            <div class="why">Algo como <code>praia.tudominio.com</code> o usa subdominio del que ya tengas. Si no quieres dominio, igual queda en <code>praia-app.vercel.app</code> gratis.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Cuenta gratis en Vercel o Netlify</div>
+            <div class="why">Subes el HTML. Listo. Cada cambio que hagas se redespliega solo si lo conectas a GitHub.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Conectar backend</div>
+            <div class="why">Pones la URL de Apps Script (Camino A) o las keys de Supabase (Camino B) en variables de entorno del hosting.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Invitar al equipo</div>
+            <div class="why">Vas a <strong>Ajustes → Equipo</strong> dentro de PRAIA. Agregas email + rol + turno. Reciben un magic link y entran.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Apps móviles "instalables"</div>
+            <div class="why">Convirtiéndola en PWA (1 archivo extra) el equipo puede "instalar" PRAIA en el celular como si fuera una app nativa — abre offline y todo. Sin App Store.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────  09 COSTOS  ───────────────── -->
+    <section class="s" id="costos">
+      <div class="s-num">09 — Costos</div>
+      <h2>Cuánto te cuesta correr esto.</h2>
+      <p class="lead">Para un equipo de tu tamaño (estimo &lt;20 personas, &lt;10 000 tickets/año) cabes <em>completamente gratis</em>. Crecimiento serio = $20–50/mes.</p>
+
+      <div class="costs">
+        <div class="cost">
+          <div class="ct-label">Camino A · Hoy</div>
+          <div class="ct-val">$0/mes</div>
+          <div class="ct-sub">Google Workspace + Vercel free</div>
+        </div>
+        <div class="cost">
+          <div class="ct-label">Camino B · Inicio</div>
+          <div class="ct-val">$0/mes</div>
+          <div class="ct-sub">Supabase free hasta 500 MB</div>
+        </div>
+        <div class="cost">
+          <div class="ct-label">Camino B · Escala</div>
+          <div class="ct-val">~$25/mes</div>
+          <div class="ct-sub">Supabase Pro + Vercel Pro</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────  10 PLAN  ───────────────── -->
+    <section class="s" id="plan">
+      <div class="s-num">10 — Plan recomendado</div>
+      <h2>Mis siguientes 14 días si fuera tú.</h2>
+
+      <div class="steps-list">
+        <div class="step-row">
+          <div>
+            <div class="what">Día 1–2 · Validamos el prototipo con 2 agentes</div>
+            <div class="why">Les muestras la app actual (mock data) y anotas qué les sobra, qué les falta, qué columnas necesitan que hoy no veo.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Día 3 · Finalizar modelo de datos</div>
+            <div class="why">Cierras qué columnas tendrán <code>tickets</code>, <code>apartments</code>, <code>users</code>, <code>audit_log</code>.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Día 4–6 · Camino A en producción</div>
+            <div class="why">Apps Script + tu Sheet "Tickets" + Vercel. Login con Google de tu Workspace. Equipo empieza a usarlo en paralelo a AppSheet.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Día 7–10 · Audit + roles finos</div>
+            <div class="why">Agregar la hoja Audit_Log y matriz de roles. Vista de Auditoría dentro de Ajustes.</div>
+          </div>
+        </div>
+        <div class="step-row">
+          <div>
+            <div class="what">Día 11–14 · Decisión Camino B</div>
+            <div class="why">Si ya hay tracción y el equipo está cómodo: migración planificada a Supabase con backup de la Sheet como respaldo histórico.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>¿Continuamos?</strong> Dime cuál camino prefieres y te preparo lo siguiente: (a) el código de Apps Script listo para pegar en tu Sheet, (b) el schema SQL para Supabase, (c) la vista de "Auditoría" y "Equipo" dentro del prototipo. Cualquiera de los tres lo puedo dejar listo en este chat.
+      </div>
+    </section>
+
+    <footer>
+      <span>PRAIA · arquitectura &amp; despliegue · v1</span>
+      <span>borrador · sujeto a iteración con tu equipo</span>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+/* TOC scroll spy */
+const links = document.querySelectorAll('#toc-list a');
+const sections = [...document.querySelectorAll('section.s')];
+function spy(){
+  const y = window.scrollY + 120;
+  let active = sections[0]?.id;
+  for(const s of sections){
+    if(s.offsetTop <= y) active = s.id;
+  }
+  links.forEach(a=>{
+    a.classList.toggle('active', a.getAttribute('href') === '#' + active);
+  });
+}
+window.addEventListener('scroll', spy, {passive:true});
+window.addEventListener('load', spy);
+spy();
+</script>
+</body>
+</html>

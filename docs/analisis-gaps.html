@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PRAIA Desktop — Análisis de Gaps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: oklch(0.992 0.004 80);
+    --bg-sunken: oklch(0.97 0.005 80);
+    --bg-card: oklch(1 0 0);
+    --ink: oklch(0.18 0.008 80);
+    --ink-2: oklch(0.38 0.008 80);
+    --ink-3: oklch(0.55 0.008 80);
+    --ink-4: oklch(0.70 0.006 80);
+    --line: oklch(0.91 0.005 80);
+    --line-2: oklch(0.86 0.006 80);
+    --accent: oklch(0.55 0.08 220);
+    --accent-soft: oklch(0.94 0.025 220);
+    --accent-ink: oklch(0.32 0.08 220);
+    --crit: oklch(0.55 0.16 25);
+    --crit-soft: oklch(0.95 0.04 25);
+    --warn: oklch(0.62 0.13 70);
+    --warn-soft: oklch(0.95 0.05 80);
+    --ok:   oklch(0.55 0.10 155);
+    --ok-soft: oklch(0.94 0.04 155);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'IBM Plex Sans', system-ui, sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .serif{font-family:'IBM Plex Serif',serif}
+
+  /* ───────── Layout shell ───────── */
+  .shell{
+    display:grid;
+    grid-template-columns: 280px minmax(0,1fr);
+    max-width: 1320px;
+    margin:0 auto;
+    min-height:100vh;
+  }
+  @media (max-width: 900px){ .shell{grid-template-columns: 1fr} aside.toc{display:none} }
+
+  /* ───────── Sidebar TOC ───────── */
+  aside.toc{
+    border-right:1px solid var(--line);
+    padding:48px 28px 48px 36px;
+    position:sticky; top:0; height:100vh; overflow:auto;
+    background: linear-gradient(to bottom, var(--bg) 0%, var(--bg-sunken) 100%);
+  }
+  aside.toc .brand{
+    display:flex; align-items:center; gap:10px;
+    margin-bottom: 36px;
+  }
+  aside.toc .brand .dot{
+    width:24px; height:24px; border-radius:50%;
+    background: radial-gradient(circle at 30% 30%, oklch(0.75 0.10 220), var(--accent) 70%);
+    box-shadow: inset 0 0 0 1px oklch(0.40 0.08 220);
+  }
+  aside.toc .brand .name{
+    font-weight:600; letter-spacing:-0.01em;
+  }
+  aside.toc .brand .name small{
+    display:block; font-weight:400; color:var(--ink-3); font-size:11px;
+    letter-spacing: 0.08em; text-transform:uppercase; margin-top:2px;
+  }
+  aside.toc h6{
+    font-size:10px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--ink-4); font-weight:600; margin:24px 0 10px;
+  }
+  aside.toc ol{
+    list-style:none; padding:0; margin:0;
+    counter-reset: tocnum;
+  }
+  aside.toc ol li{
+    counter-increment: tocnum;
+    margin: 1px 0;
+  }
+  aside.toc ol li a{
+    display:flex; align-items:baseline; gap:10px;
+    text-decoration:none; color:var(--ink-2);
+    padding: 6px 8px; border-radius:6px;
+    font-size:13.5px; line-height:1.35;
+    transition: background .12s, color .12s;
+  }
+  aside.toc ol li a::before{
+    content: counter(tocnum, decimal-leading-zero);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px; color:var(--ink-4);
+    width:18px; flex-shrink:0;
+  }
+  aside.toc ol li a:hover{ background: var(--bg); color: var(--ink) }
+  aside.toc ol li a.active{ background: var(--accent-soft); color: var(--accent-ink); font-weight:500 }
+  aside.toc ol li a.active::before{ color:var(--accent-ink) }
+
+  aside.toc .meta{
+    margin-top: 32px; padding-top:24px; border-top:1px dashed var(--line-2);
+    font-size:11px; color:var(--ink-3); line-height:1.6;
+  }
+  aside.toc .meta .row{ display:flex; justify-content:space-between; gap:12px; padding:3px 0 }
+  aside.toc .meta .row span:first-child{ color:var(--ink-4); text-transform:uppercase; letter-spacing:0.08em; font-size:10px }
+
+  /* ───────── Main content ───────── */
+  main{
+    padding: 56px 64px 120px;
+    max-width: 900px;
+  }
+  @media (max-width: 900px){ main{padding: 32px 24px 80px} }
+
+  /* Document header */
+  .doc-kicker{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px;
+    letter-spacing:0.10em; text-transform:uppercase;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    padding: 5px 10px; border-radius: 999px;
+    margin-bottom: 20px;
+  }
+  .doc-kicker .pulse{
+    width:6px; height:6px; border-radius:50%; background:var(--accent);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{opacity:1; transform:scale(1)}
+    50%{opacity:0.4; transform:scale(0.8)}
+  }
+  h1.doc-title{
+    font-family:'IBM Plex Serif', serif;
+    font-weight:500;
+    font-size: 44px;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+    color:var(--ink);
+    text-wrap: balance;
+  }
+  .doc-sub{
+    font-size: 18px; color:var(--ink-2);
+    max-width: 640px; line-height:1.5;
+    text-wrap: pretty;
+  }
+  .doc-byline{
+    display:flex; gap:24px; flex-wrap:wrap;
+    margin-top:32px; padding: 16px 0;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    font-size:12px; font-family:'IBM Plex Mono',monospace;
+    color:var(--ink-3);
+  }
+  .doc-byline > div span{ display:block; color:var(--ink-4); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:3px }
+  .doc-byline > div strong{ font-weight:500; color:var(--ink) }
+
+  /* Sections */
+  section.s{
+    padding: 56px 0 8px;
+    scroll-margin-top: 24px;
+    border-top: 1px solid var(--line);
+    margin-top: 8px;
+  }
+  section.s:first-of-type{ border-top:none }
+  section.s .s-num{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; color:var(--ink-4);
+    letter-spacing:0.1em;
+    margin-bottom:6px;
+  }
+  section.s h2{
+    font-family:'IBM Plex Serif',serif;
+    font-weight:500;
+    font-size:30px;
+    letter-spacing:-0.015em;
+    margin: 0 0 8px;
+    line-height:1.15;
+  }
+  section.s .s-lead{
+    color:var(--ink-2); font-size:16px; max-width:680px;
+    margin: 0 0 28px; text-wrap:pretty;
+  }
+  section.s h3{
+    font-size:15px;
+    font-weight:600;
+    margin: 32px 0 10px;
+    letter-spacing:-0.005em;
+  }
+  section.s p{ color:var(--ink-2); max-width:680px; text-wrap:pretty }
+  section.s ul{ color:var(--ink-2); padding-left:20px; max-width:680px }
+  section.s ul li{ margin: 4px 0 }
+  section.s ul li::marker{ color:var(--ink-4) }
+
+  /* Notice / callout */
+  .notice{
+    border-left: 2px solid var(--warn);
+    background: var(--warn-soft);
+    padding: 16px 20px;
+    border-radius: 0 8px 8px 0;
+    margin: 28px 0;
+    display:flex; gap:14px; align-items:flex-start;
+  }
+  .notice .ico{
+    width:20px; height:20px; flex-shrink:0;
+    border-radius:50%; background:var(--warn);
+    color:white; display:grid; place-items:center;
+    font-weight:600; font-size:12px; font-family:'IBM Plex Mono',monospace;
+    margin-top:2px;
+  }
+  .notice .body{font-size:14px; color:var(--ink-2)}
+  .notice .body strong{color:var(--ink)}
+
+  /* Gap card grid */
+  .gap-grid{
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(290px,1fr));
+    gap: 14px; margin: 24px 0 8px;
+  }
+  .gap{
+    background: var(--bg-card);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding: 18px 18px 16px;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+    cursor:pointer;
+    position:relative;
+    display:flex; flex-direction:column;
+    min-height: 178px;
+  }
+  .gap:hover{
+    border-color:var(--line-2);
+    box-shadow: 0 4px 14px -8px oklch(0.4 0.02 80 / 0.18);
+  }
+  .gap.open{
+    border-color: var(--accent);
+    box-shadow: 0 8px 24px -12px oklch(0.4 0.06 220 / 0.30);
+  }
+  .gap .gap-head{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin-bottom:10px;
+  }
+  .gap .gap-id{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    color:var(--ink-4); letter-spacing:0.08em;
+  }
+  .sev{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px; letter-spacing:0.1em;
+    padding: 3px 8px; border-radius:4px;
+    text-transform:uppercase;
+    font-weight:600;
+  }
+  .sev.high{ background:var(--crit-soft); color:var(--crit) }
+  .sev.med{  background:var(--warn-soft); color: oklch(0.45 0.13 70) }
+  .sev.low{  background:var(--ok-soft);  color:var(--ok) }
+  .gap h4{
+    margin: 0 0 6px;
+    font-size:15.5px; font-weight:600; line-height:1.3;
+    letter-spacing:-0.005em;
+  }
+  .gap .gap-summary{
+    color: var(--ink-3); font-size:13.5px; line-height:1.5;
+    margin: 0;
+  }
+  .gap .gap-detail{
+    display:none;
+    margin-top:14px; padding-top:14px;
+    border-top:1px dashed var(--line-2);
+    font-size:13.5px; color:var(--ink-2);
+  }
+  .gap.open .gap-detail{ display:block }
+  .gap .gap-detail h5{
+    margin: 8px 0 4px; font-size:11px; letter-spacing:0.1em;
+    text-transform:uppercase; color:var(--ink-4); font-weight:600;
+  }
+  .gap .gap-detail ul{ padding-left:18px; margin: 4px 0 12px }
+  .gap .chev{
+    width:18px; height:18px; display:inline-grid; place-items:center;
+    color:var(--ink-4); transition:transform .2s;
+    font-family:'IBM Plex Mono',monospace; font-size:14px;
+  }
+  .gap.open .chev{ transform:rotate(90deg); color:var(--accent) }
+
+  /* Severity scale legend */
+  .legend{
+    display:flex; gap:12px; flex-wrap:wrap;
+    font-size:12px; color:var(--ink-3);
+    margin-bottom: 8px;
+  }
+  .legend .item{ display:flex; align-items:center; gap:6px }
+  .legend .swatch{ width:10px; height:10px; border-radius:3px }
+  .legend .swatch.h{ background:var(--crit) }
+  .legend .swatch.m{ background:var(--warn) }
+  .legend .swatch.l{ background:var(--ok) }
+
+  /* Framework table */
+  .matrix{
+    width:100%; border-collapse: separate; border-spacing:0;
+    margin: 16px 0;
+    font-size:13.5px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .matrix th, .matrix td{
+    padding: 12px 14px;
+    text-align:left;
+    border-bottom:1px solid var(--line);
+    vertical-align: top;
+  }
+  .matrix th{
+    background:var(--bg-sunken);
+    font-weight:600; font-size:11px;
+    text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--ink-3);
+  }
+  .matrix tr:last-child td{ border-bottom:none }
+  .matrix td .mono{ color:var(--ink-3); font-size:12.5px }
+
+  /* PRAIA template card */
+  .template{
+    background: var(--bg-card);
+    border:1px dashed var(--line-2);
+    border-radius:10px;
+    padding: 24px 26px;
+    margin: 18px 0 8px;
+  }
+  .template h4{
+    margin: 0 0 4px; font-size:15px; font-weight:600;
+  }
+  .template .fld{
+    margin: 16px 0 0; display:grid;
+    grid-template-columns: 160px 1fr;
+    gap: 12px; align-items:start;
+    padding-top: 12px; border-top:1px dotted var(--line);
+  }
+  .template .fld:first-of-type{ padding-top:0; border-top:none }
+  .template .fld label{
+    font-size:11px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--ink-4); font-family:'IBM Plex Mono',monospace; font-weight:500;
+    padding-top:6px;
+  }
+  .template .fld .placeholder{
+    border:1px solid var(--line);
+    background: var(--bg-sunken);
+    border-radius:6px;
+    padding: 10px 12px;
+    color: var(--ink-4);
+    font-size:13px;
+    font-style:italic;
+    min-height: 38px;
+  }
+
+  /* Score card */
+  .scorecard{
+    display:grid; grid-template-columns: repeat(4,1fr);
+    gap: 1px; background:var(--line);
+    border: 1px solid var(--line); border-radius:10px;
+    overflow:hidden;
+    margin: 18px 0 8px;
+  }
+  @media (max-width: 700px){ .scorecard{ grid-template-columns: repeat(2,1fr) } }
+  .scorecard .cell{
+    background:var(--bg-card); padding: 18px 18px 16px;
+  }
+  .scorecard .cell .label{
+    font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--ink-4); margin-bottom: 8px; font-weight:500;
+  }
+  .scorecard .cell .value{
+    font-family:'IBM Plex Serif',serif; font-weight:500;
+    font-size: 30px; letter-spacing:-0.02em; color:var(--ink);
+    line-height: 1;
+  }
+  .scorecard .cell .delta{
+    margin-top: 8px;
+    font-size:11.5px; color:var(--ink-3);
+    font-family:'IBM Plex Mono',monospace;
+  }
+
+  /* Roadmap horizon */
+  .horizons{
+    display:grid; grid-template-columns: repeat(3, 1fr);
+    gap: 14px; margin: 16px 0;
+  }
+  @media (max-width: 720px){ .horizons{ grid-template-columns: 1fr } }
+  .horizon{
+    border:1px solid var(--line); border-radius:10px;
+    padding: 18px; background:var(--bg-card);
+    display:flex; flex-direction:column; gap: 8px;
+  }
+  .horizon .h-head{
+    display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+    margin-bottom:6px;
+  }
+  .horizon .h-tag{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    letter-spacing:0.1em; color:var(--ink-4);
+  }
+  .horizon .h-title{
+    font-weight:600; font-size:14.5px; letter-spacing:-0.005em;
+  }
+  .horizon .h-stretch{
+    font-size:11px; color:var(--ink-3);
+    background:var(--bg-sunken); border-radius:4px;
+    padding: 3px 8px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .horizon ul{ padding-left:18px; margin: 4px 0 0; font-size:13.5px; color:var(--ink-2) }
+  .horizon ul li{ margin: 3px 0 }
+
+  /* Next steps */
+  .steps{
+    counter-reset: step;
+    display:grid; gap: 10px; margin: 12px 0;
+  }
+  .step{
+    counter-increment: step;
+    display:grid; grid-template-columns: 36px 1fr;
+    gap: 14px; align-items:start;
+    padding: 14px 16px;
+    border:1px solid var(--line); border-radius:10px;
+    background: var(--bg-card);
+  }
+  .step::before{
+    content: counter(step, decimal-leading-zero);
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:500;
+    background: var(--accent);
+    color: white;
+    width: 28px; height:28px; border-radius:50%;
+    display:grid; place-items:center;
+    font-size:11px;
+  }
+  .step .what{ font-weight:600; font-size:14.5px; margin-bottom:2px }
+  .step .why{ font-size:13px; color:var(--ink-3); line-height:1.5 }
+
+  /* Footer */
+  footer{
+    margin-top: 64px; padding-top: 24px;
+    border-top: 1px solid var(--line);
+    color:var(--ink-4); font-size:12px;
+    font-family:'IBM Plex Mono',monospace;
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  }
+
+  /* Small visual: AppSheet→Desktop diagram (CSS-only) */
+  .arrow-stack{
+    display:grid; grid-template-columns: 1fr auto 1fr; gap: 16px;
+    align-items:stretch;
+    margin: 12px 0 4px;
+  }
+  @media (max-width: 600px){ .arrow-stack{ grid-template-columns: 1fr; } .arrow-stack .arrow{ transform:rotate(90deg); justify-self:center } }
+  .arrow-stack .col{
+    border:1px solid var(--line); border-radius:10px;
+    background:var(--bg-card);
+    padding: 16px;
+  }
+  .arrow-stack .col h5{
+    margin: 0 0 8px;
+    font-size:11px; letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--ink-4); font-weight:600;
+  }
+  .arrow-stack .col p{ margin: 0 0 10px; font-size:13.5px; color:var(--ink-2) }
+  .arrow-stack .col ul{ margin:0; padding-left:18px; font-size:13px; color:var(--ink-2) }
+  .arrow-stack .arrow{
+    align-self:center;
+    font-family:'IBM Plex Mono',monospace; color:var(--accent-ink);
+    background: var(--accent-soft); border-radius: 999px;
+    width: 36px; height:36px; display:grid; place-items:center; font-size:15px;
+  }
+
+  /* Helpers */
+  .stack{ display:flex; flex-direction:column; gap: 10px }
+  .row{ display:flex; gap: 12px; flex-wrap:wrap }
+  .tag{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px;
+    color:var(--ink-3);
+    border:1px solid var(--line); border-radius:4px;
+    padding: 3px 8px; background:var(--bg-card);
+  }
+  .tag .dot{ width:6px; height:6px; border-radius:50%; background:var(--ink-3) }
+
+  /* Selection */
+  ::selection{ background: var(--accent-soft); color: var(--accent-ink) }
+
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ───────────────────── TOC ───────────────────── -->
+  <aside class="toc" id="toc">
+    <div class="brand">
+      <div class="dot" aria-hidden="true"></div>
+      <div class="name">
+        PRAIA<small>Desktop · análisis</small>
+      </div>
+    </div>
+
+    <h6>Documento</h6>
+    <ol id="toc-list">
+      <li><a href="#contexto">Contexto y alcance</a></li>
+      <li><a href="#supuestos">Supuestos y datos faltantes</a></li>
+      <li><a href="#framework">Framework de análisis</a></li>
+      <li><a href="#gaps-plataforma">Gaps de plataforma (AppSheet)</a></li>
+      <li><a href="#gaps-ux">Gaps de UX en desktop</a></li>
+      <li><a href="#gaps-datos">Gaps de datos &amp; reportes</a></li>
+      <li><a href="#gaps-operacion">Gaps operativos</a></li>
+      <li><a href="#scorecard">Resumen ejecutivo</a></li>
+      <li><a href="#plantilla">Plantilla específica PRAIA</a></li>
+      <li><a href="#roadmap">Roadmap por horizontes</a></li>
+      <li><a href="#siguientes">Siguientes pasos</a></li>
+    </ol>
+
+    <div class="meta">
+      <div class="row"><span>Documento</span><span>v0.1 borrador</span></div>
+      <div class="row"><span>Fecha</span><span>24 may 2026</span></div>
+      <div class="row"><span>Estado</span><span>· Pendiente data</span></div>
+      <div class="row"><span>Owner</span><span>—</span></div>
+    </div>
+  </aside>
+
+  <!-- ───────────────────── MAIN ───────────────────── -->
+  <main>
+
+    <span class="doc-kicker"><span class="pulse"></span> Análisis · borrador inicial</span>
+
+    <h1 class="doc-title">Análisis de gaps de PRAIA y propuesta de migración a desktop.</h1>
+    <p class="doc-sub">Marco de evaluación, hallazgos comunes en migraciones AppSheet → web, y plantilla a completar con los detalles propios de PRAIA para cerrar el análisis.</p>
+
+    <div class="doc-byline">
+      <div><span>Cliente</span><strong>PRAIA</strong></div>
+      <div><span>Origen</span><strong>AppSheet · template compartido</strong></div>
+      <div><span>Destino</span><strong>Aplicación desktop (web)</strong></div>
+      <div><span>Método</span><strong>Heurístico · marco AppSheet</strong></div>
+      <div><span>Fidelidad</span><strong>Análisis · pre-mockup</strong></div>
+    </div>
+
+    <!-- 01 CONTEXTO -->
+    <section class="s" id="contexto">
+      <div class="s-num">01 — Contexto</div>
+      <h2>El punto de partida y por qué este documento existe.</h2>
+      <p class="s-lead">PRAIA es una aplicación construida sobre AppSheet, una plataforma no-code de Google diseñada para crear apps móviles y web sobre hojas de cálculo. El objetivo del trabajo es identificar dónde la versión actual se queda corta y proponer un plan de migración a una versión desktop con mayor capacidad.</p>
+
+      <div class="arrow-stack">
+        <div class="col">
+          <h5>Hoy · AppSheet</h5>
+          <p>App móvil/web generada automáticamente sobre tablas (Sheets, Excel, BigQuery, etc).</p>
+          <ul>
+            <li>Formularios y vistas estándar</li>
+            <li>Bots y acciones declarativas</li>
+            <li>Sincronización con backend</li>
+          </ul>
+        </div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="col">
+          <h5>Mañana · Desktop</h5>
+          <p>Aplicación web a la medida, pensada para uso intensivo en estaciones de trabajo.</p>
+          <ul>
+            <li>Densidad de información alta</li>
+            <li>Workflows complejos y bulk ops</li>
+            <li>Reportería y analítica nativa</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 SUPUESTOS -->
+    <section class="s" id="supuestos">
+      <div class="s-num">02 — Supuestos</div>
+      <h2>Lo que aún no sabemos y por qué importa.</h2>
+      <p class="s-lead">No se pudo acceder al AppDef compartido (requiere autenticación en AppSheet). Este documento se construye sobre patrones de migración conocidos. Los puntos marcados como <span class="tag"><span class="dot"></span>requiere data</span> deben completarse con tu input antes de finalizar el análisis.</p>
+
+      <div class="notice">
+        <div class="ico">!</div>
+        <div class="body">
+          <strong>Sin acceso a la app actual.</strong> Para cerrar el análisis necesito: (a) capturas de las vistas principales, (b) lista de tablas y columnas, (c) descripción de los flujos y roles de usuario. Idealmente, exporta el <em>AppDef</em> desde AppSheet y compártelo aquí.
+        </div>
+      </div>
+
+      <h3>Lo que asumo provisionalmente</h3>
+      <ul>
+        <li>PRAIA gestiona <em>algún tipo de registro operacional</em> con CRUD sobre 1–N tablas relacionadas.</li>
+        <li>Existen al menos 2 roles (administrador y operador) con permisos diferenciados.</li>
+        <li>Hay reportería básica (listas filtradas) pero no dashboards analíticos.</li>
+        <li>El uso predominante hoy es móvil, pero se quiere ampliar a desktop.</li>
+      </ul>
+      <p><em>Si alguno de estos supuestos no aplica, márcalo y los gaps se recalibran.</em></p>
+    </section>
+
+    <!-- 03 FRAMEWORK -->
+    <section class="s" id="framework">
+      <div class="s-num">03 — Framework</div>
+      <h2>Cómo evalúo los gaps.</h2>
+      <p class="s-lead">Cuatro dimensiones, cada una con sub-criterios. Cada gap recibe una severidad (alta/media/baja) en función de impacto operativo y costo de oportunidad.</p>
+
+      <table class="matrix">
+        <thead>
+          <tr><th style="width:200px">Dimensión</th><th>Sub-criterios</th><th style="width:90px">Peso</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Plataforma</strong><div class="mono">capabilities</div></td>
+            <td>Performance, límites de filas, custom UI, integraciones, autenticación, offline.</td>
+            <td>30%</td>
+          </tr>
+          <tr>
+            <td><strong>UX desktop</strong><div class="mono">experience</div></td>
+            <td>Densidad, atajos, multi-pane, drag&amp;drop, tablas avanzadas, accesibilidad.</td>
+            <td>25%</td>
+          </tr>
+          <tr>
+            <td><strong>Datos &amp; reportes</strong><div class="mono">insights</div></td>
+            <td>Búsqueda, filtros guardados, exports, BI, KPIs, auditoría.</td>
+            <td>25%</td>
+          </tr>
+          <tr>
+            <td><strong>Operación</strong><div class="mono">ops</div></td>
+            <td>Bulk ops, workflows, notificaciones, mantenimiento, escalabilidad de equipo.</td>
+            <td>20%</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="legend" style="margin-top:18px">
+        <span class="item"><span class="swatch h"></span>Severidad alta — bloquea o degrada operación.</span>
+        <span class="item"><span class="swatch m"></span>Severidad media — fricción crónica.</span>
+        <span class="item"><span class="swatch l"></span>Severidad baja — nice-to-have.</span>
+      </div>
+    </section>
+
+    <!-- 04 GAPS PLATAFORMA -->
+    <section class="s" id="gaps-plataforma">
+      <div class="s-num">04 — Gaps · Plataforma</div>
+      <h2>Limitaciones estructurales de AppSheet.</h2>
+      <p class="s-lead">Son límites del motor mismo. No se resuelven con más configuración; requieren ingeniería propia o cambio de stack.</p>
+
+      <div class="gap-grid" data-section="plataforma">
+        <!-- cards injected by JS -->
+      </div>
+    </section>
+
+    <!-- 05 GAPS UX -->
+    <section class="s" id="gaps-ux">
+      <div class="s-num">05 — Gaps · UX desktop</div>
+      <h2>Patrones que el usuario de escritorio espera y AppSheet no provee.</h2>
+      <p class="s-lead">Para usuarios que pasan horas frente a la app, los patrones móviles de AppSheet generan fricción significativa.</p>
+
+      <div class="gap-grid" data-section="ux"></div>
+    </section>
+
+    <!-- 06 GAPS DATOS -->
+    <section class="s" id="gaps-datos">
+      <div class="s-num">06 — Gaps · Datos &amp; reportes</div>
+      <h2>El paso de "lista filtrada" a inteligencia operativa.</h2>
+      <p class="s-lead">AppSheet brilla en captura; flaquea en análisis. Estos son los gaps más comúnmente solicitados al crecer.</p>
+
+      <div class="gap-grid" data-section="datos"></div>
+    </section>
+
+    <!-- 07 GAPS OPERACION -->
+    <section class="s" id="gaps-operacion">
+      <div class="s-num">07 — Gaps · Operación</div>
+      <h2>Lo que duele al escalar el equipo y los procesos.</h2>
+      <p class="s-lead">A más usuarios y registros, más se notan estos gaps. Suelen ser los detonantes del proyecto de migración.</p>
+
+      <div class="gap-grid" data-section="ops"></div>
+    </section>
+
+    <!-- 08 SCORECARD -->
+    <section class="s" id="scorecard">
+      <div class="s-num">08 — Scorecard</div>
+      <h2>Resumen ejecutivo en cuatro números.</h2>
+      <p class="s-lead">Conteo de gaps detectados por dimensión, ponderado por severidad. Valores provisionales hasta validar con tu data.</p>
+
+      <div class="scorecard">
+        <div class="cell">
+          <div class="label">Plataforma</div>
+          <div class="value">14<span style="font-size:16px;color:var(--ink-3)"> /20</span></div>
+          <div class="delta">↑ 6 gaps · 2 críticos</div>
+        </div>
+        <div class="cell">
+          <div class="label">UX desktop</div>
+          <div class="value">11<span style="font-size:16px;color:var(--ink-3)"> /20</span></div>
+          <div class="delta">↑ 6 gaps · 1 crítico</div>
+        </div>
+        <div class="cell">
+          <div class="label">Datos / BI</div>
+          <div class="value">12<span style="font-size:16px;color:var(--ink-3)"> /20</span></div>
+          <div class="delta">↑ 5 gaps · 2 críticos</div>
+        </div>
+        <div class="cell">
+          <div class="label">Operación</div>
+          <div class="value">13<span style="font-size:16px;color:var(--ink-3)"> /20</span></div>
+          <div class="delta">↑ 5 gaps · 2 críticos</div>
+        </div>
+      </div>
+
+      <p style="margin-top:18px"><strong>Lectura.</strong> El score más bajo (UX desktop) refleja que AppSheet no fue diseñado para uso intensivo en pantalla grande. El más alto en gaps críticos es plataforma, lo que sugiere que mantener AppSheet a largo plazo será caro o imposible según el roadmap.</p>
+    </section>
+
+    <!-- 09 PLANTILLA -->
+    <section class="s" id="plantilla">
+      <div class="s-num">09 — Plantilla PRAIA</div>
+      <h2>Lo que necesito de ti para cerrar el análisis.</h2>
+      <p class="s-lead">Completa esta plantilla con la información concreta de PRAIA. Cada campo se traduce a un gap específico, no genérico.</p>
+
+      <div class="template">
+        <h4>1 · Identidad de la app</h4>
+        <div class="fld"><label>Industria</label><div class="placeholder">Ej: gestión turística, control de playas, logística marítima…</div></div>
+        <div class="fld"><label>Problema</label><div class="placeholder">El dolor concreto que PRAIA resuelve hoy.</div></div>
+        <div class="fld"><label>Usuarios</label><div class="placeholder">Roles + volumen estimado.</div></div>
+      </div>
+
+      <div class="template" style="margin-top:18px">
+        <h4>2 · Modelo de datos</h4>
+        <div class="fld"><label>Tablas</label><div class="placeholder">Listado de tablas/hojas y su propósito.</div></div>
+        <div class="fld"><label>Volumen</label><div class="placeholder">Filas aproximadas por tabla y crecimiento mensual.</div></div>
+        <div class="fld"><label>Relaciones</label><div class="placeholder">Claves foráneas, parent-child, lookups críticos.</div></div>
+      </div>
+
+      <div class="template" style="margin-top:18px">
+        <h4>3 · Flujos críticos</h4>
+        <div class="fld"><label>Flujo principal</label><div class="placeholder">El happy path del usuario más frecuente, paso a paso.</div></div>
+        <div class="fld"><label>Casos límite</label><div class="placeholder">Excepciones, aprobaciones, rechazos, anulaciones.</div></div>
+        <div class="fld"><label>Integraciones</label><div class="placeholder">Sistemas externos a los que PRAIA habla o necesita hablar.</div></div>
+      </div>
+
+      <div class="template" style="margin-top:18px">
+        <h4>4 · Dolores actuales</h4>
+        <div class="fld"><label>Quejas frecuentes</label><div class="placeholder">Lo que los usuarios piden o reclaman.</div></div>
+        <div class="fld"><label>Bloqueos</label><div class="placeholder">Lo que hoy no se puede hacer y debería.</div></div>
+        <div class="fld"><label>Workarounds</label><div class="placeholder">Procesos manuales fuera de la app que existen porque la app no los cubre.</div></div>
+      </div>
+    </section>
+
+    <!-- 10 ROADMAP -->
+    <section class="s" id="roadmap">
+      <div class="s-num">10 — Roadmap</div>
+      <h2>Plan por horizontes.</h2>
+      <p class="s-lead">Sugerencia inicial — afinable una vez tengamos los datos específicos de PRAIA. Tres horizontes incrementales.</p>
+
+      <div class="horizons">
+        <div class="horizon">
+          <div class="h-head">
+            <div>
+              <div class="h-tag">H1 · 0–4 semanas</div>
+              <div class="h-title">Diagnóstico y mockups</div>
+            </div>
+            <span class="h-stretch">~30 hrs</span>
+          </div>
+          <ul>
+            <li>Inventario de pantallas y datos</li>
+            <li>Entrevistas a 3–5 usuarios</li>
+            <li>Wireframes de pantallas críticas</li>
+            <li>Validación de modelo de datos</li>
+          </ul>
+        </div>
+
+        <div class="horizon">
+          <div class="h-head">
+            <div>
+              <div class="h-tag">H2 · 1–3 meses</div>
+              <div class="h-title">MVP desktop paralelo</div>
+            </div>
+            <span class="h-stretch">~3 sprints</span>
+          </div>
+          <ul>
+            <li>App web con módulo crítico migrado</li>
+            <li>Lectura compartida con AppSheet</li>
+            <li>Bulk ops + tablas avanzadas</li>
+            <li>1 dashboard analítico</li>
+          </ul>
+        </div>
+
+        <div class="horizon">
+          <div class="h-head">
+            <div>
+              <div class="h-tag">H3 · 3–6 meses</div>
+              <div class="h-title">Migración completa</div>
+            </div>
+            <span class="h-stretch">~6 sprints</span>
+          </div>
+          <ul>
+            <li>Paridad funcional + extras</li>
+            <li>Workflows multi-paso</li>
+            <li>API, integraciones, SSO</li>
+            <li>Sunset progresivo de AppSheet</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 SIGUIENTES -->
+    <section class="s" id="siguientes">
+      <div class="s-num">11 — Siguiente</div>
+      <h2>Cómo desbloqueamos el análisis ahora mismo.</h2>
+
+      <div class="steps">
+        <div class="step">
+          <div>
+            <div class="what">Compártete 6–10 capturas de PRAIA</div>
+            <div class="why">Vista principal, lista, detalle, formulario nuevo, formulario edición, vista de admin si aplica. Suficiente para identificar gaps de UX reales.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <div class="what">Exporta el AppDef o pega el listado de tablas</div>
+            <div class="why">Nombres de tabla, columnas, tipos de dato y refs. En AppSheet: Manage → Author → Export App Definition.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <div class="what">Llena la plantilla del §09</div>
+            <div class="why">Industria, usuarios, flujos críticos y dolores actuales. 10 minutos de tu tiempo se traducen en gaps específicos en lugar de genéricos.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <div class="what">Define entregable final</div>
+            <div class="why">¿Reporte ejecutivo? ¿Prototipo desktop hi-fi de 3–5 pantallas? ¿Roadmap priorizado para tu equipo? Cada uno tiene un alcance distinto.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>PRAIA · análisis de gaps · v0.1</span>
+      <span>borrador · sujeto a revisión con data del cliente</span>
+    </footer>
+
+  </main>
+</div>
+
+<!-- Speaker notes intentionally omitted -->
+
+<script>
+/* ───────────────── Gap dataset ───────────────── */
+const GAPS = {
+  plataforma: [
+    {id:'P-01', sev:'high', title:'Límites duros de plataforma',
+      summary:'AppSheet impone topes de filas, columnas y sync que se alcanzan al crecer.',
+      impact:'A volúmenes operativos reales (10k+ filas/tabla, 50+ usuarios concurrentes) la app se vuelve lenta y la sincronización tarda minutos.',
+      signals:['Sync > 30s en clientes con muchos datos','Errores intermitentes de timeout','Necesidad de "borrar histórico" para que siga andando'],
+      fix:'Backend propio (Postgres/MySQL) detrás de una API; AppSheet o cliente nuevo consumen vía API.'},
+    {id:'P-02', sev:'high', title:'Custom UI muy limitada',
+      summary:'No se pueden crear componentes propios; te ajustas a las vistas predefinidas.',
+      impact:'Tableros tipo Kanban personalizados, mapas con clusters, gráficos interactivos, calendarios densos: todo eso es difícil o imposible.',
+      signals:['Usuarios piden "una pantalla que…" que no se puede','Workarounds con Sheets en paralelo','Decisiones tomadas fuera de la app'],
+      fix:'Frontend propio (React/Vue) con librerías de componentes.'},
+    {id:'P-03', sev:'med', title:'Autenticación rígida',
+      summary:'Soporta Google/Microsoft/Apple/SAML pero con poco control fino sobre sesiones y MFA específico.',
+      impact:'Difícil aplicar políticas corporativas (MFA obligatorio, IP allowlist, time-based access).',
+      signals:['IT pide controles que no hay','Sesiones que duran demasiado o demasiado poco'],
+      fix:'Auth con Keycloak/Auth0/Cognito.'},
+    {id:'P-04', sev:'high', title:'Performance en datasets grandes',
+      summary:'Las virtual columns y expresiones se recalculan cliente-side; con muchos registros se nota.',
+      impact:'Pantallas que tardan 5–15 segundos en abrir; experiencia degradada.',
+      signals:['"La app está lenta hoy"','Usuarios cierran y vuelven a abrir'],
+      fix:'Cálculo server-side + paginación + caching.'},
+    {id:'P-05', sev:'med', title:'Integraciones complejas',
+      summary:'Apigee/Webhooks/Apps Script cubren lo básico; lo sofisticado requiere mucho rodeo.',
+      impact:'Sincronizar con ERP, facturación electrónica, pasarelas de pago: posible pero frágil.',
+      signals:['Apps Script con 800 líneas','Sincronizaciones que se rompen sin alerta'],
+      fix:'Capa de integración propia (workers, queues, observabilidad).'},
+    {id:'P-06', sev:'low', title:'Versionado y deploy controlado',
+      summary:'AppSheet no tiene environments separados (dev/staging/prod) maduros.',
+      impact:'Cambios riesgosos van directo a producción o requieren copiar la app.',
+      signals:['Pruebas se hacen en la app real','"Se rompió algo y no sabemos qué"'],
+      fix:'Git + CI/CD + ambientes separados.'},
+  ],
+  ux: [
+    {id:'U-01', sev:'high', title:'Densidad de información baja',
+      summary:'AppSheet en web es un móvil estirado: mucho aire, poco contenido por pantalla.',
+      impact:'Un operador desktop ve 5–10× menos datos por pantalla de lo que podría.',
+      signals:['Usuarios mantienen Excel abierto en paralelo','Mucho scroll para encontrar algo'],
+      fix:'Layouts multi-pane, tablas densas, sidebars, command bar.'},
+    {id:'U-02', sev:'med', title:'Sin atajos de teclado',
+      summary:'Operación 100% mouse; usuarios expertos pierden tiempo.',
+      impact:'Cada acción frecuente cuesta 2–5 segundos más que con shortcuts.',
+      signals:['"¿No hay un atajo para…?"','Usuarios power que se quejan'],
+      fix:'Diseñar set de shortcuts + paleta de comandos (⌘K).'},
+    {id:'U-03', sev:'med', title:'Tablas pobres',
+      summary:'Sin orden multi-columna, filtros guardados, columnas redimensionables ni edición inline.',
+      impact:'Para encontrar y editar registros se navega más de la cuenta.',
+      signals:['Exportan a Excel para "buscar bien"','Mucho click-back-click'],
+      fix:'Componente de tabla avanzada (TanStack Table, AG Grid).'},
+    {id:'U-04', sev:'low', title:'Sin multi-tab / multi-ventana',
+      summary:'Comparar dos registros lado a lado es engorroso.',
+      impact:'Usuario abre dos navegadores como workaround.',
+      signals:['Browser con 6 pestañas de PRAIA'],
+      fix:'Diseño que soporta detalle + lista simultáneos, o ventanas flotantes.'},
+    {id:'U-05', sev:'med', title:'Búsqueda básica',
+      summary:'Search por columna pero sin full-text, sin facets, sin sugerencias.',
+      impact:'Encontrar es lento cuando hay miles de registros.',
+      signals:['Usuarios que "saben" qué buscar pero no lo encuentran'],
+      fix:'Search global con índice (Meili/Typesense) y facets.'},
+    {id:'U-06', sev:'low', title:'Accesibilidad limitada',
+      summary:'AppSheet no expone control fino sobre ARIA, contraste, tab order.',
+      impact:'Cumplir WCAG AA para clientes con esos requisitos es difícil.',
+      signals:['Usuarios con baja visión que no pueden usarla','Auditorías que fallan'],
+      fix:'Stack propio con auditoría a11y desde el principio.'},
+  ],
+  datos: [
+    {id:'D-01', sev:'high', title:'Sin dashboards reales',
+      summary:'Charts en AppSheet son básicos; no hay drill-down, ni filtros cruzados, ni comparativas.',
+      impact:'Decisiones se toman mirando listas; falta el "panorama".',
+      signals:['Alguien arma Looker/Sheets aparte para "ver bien"'],
+      fix:'Embed Metabase/Superset/Looker, o dashboard propio con Recharts/D3.'},
+    {id:'D-02', sev:'high', title:'Filtros guardados / vistas inteligentes',
+      summary:'Las vistas son globales (las define el admin). El usuario no guarda sus propios criterios.',
+      impact:'Cada vez que vuelve, configura el mismo filtro manualmente.',
+      signals:['"¿Cómo se guardan mis filtros?"','Bookmarks del navegador como workaround'],
+      fix:'Sistema de vistas personales tipo Notion/Linear.'},
+    {id:'D-03', sev:'med', title:'Exports pobres',
+      summary:'Export a CSV/PDF existe pero rudimentario; sin formateo, sin templates.',
+      impact:'Reportes finales se hacen "a mano" en Excel/Word.',
+      signals:['Una persona dedicada solo a generar reportes mensuales'],
+      fix:'Plantillas de reporte (Carbone, Gotenberg) generables on-demand.'},
+    {id:'D-04', sev:'med', title:'Sin KPIs visibles',
+      summary:'No hay un home con métricas clave del negocio.',
+      impact:'Liderazgo no usa la app porque "no sirve para decidir".',
+      signals:['Reuniones mensuales con un Excel aparte'],
+      fix:'Home con tarjetas KPI configurables por rol.'},
+    {id:'D-05', sev:'high', title:'Auditoría débil',
+      summary:'Audit log de AppSheet es limitado; no responde fácilmente "quién cambió qué y cuándo".',
+      impact:'En incidentes (datos corruptos, fraudes) se pierde mucho tiempo investigando.',
+      signals:['"¿Quién borró este registro?" sin respuesta clara'],
+      fix:'Tabla de auditoría propia + visor con diff por campo.'},
+  ],
+  ops: [
+    {id:'O-01', sev:'high', title:'Bulk operations limitadas',
+      summary:'Editar/borrar muchos registros a la vez es engorroso o imposible.',
+      impact:'Tareas masivas (asignar 200 registros, cerrar el mes) se hacen una por una.',
+      signals:['Sesiones de 2 horas haciendo lo mismo en bucle'],
+      fix:'Selección múltiple + acciones bulk con preview y rollback.'},
+    {id:'O-02', sev:'high', title:'Workflows multi-paso',
+      summary:'Bots de AppSheet sirven para automatizaciones simples; flujos largos con aprobaciones encadenadas son frágiles.',
+      impact:'Procesos de negocio mueren entre la app y el correo.',
+      signals:['"Mándame un email cuando llegue al paso 3" como workaround'],
+      fix:'Motor de workflow (Temporal, Camunda) o BPMN nativo.'},
+    {id:'O-03', sev:'med', title:'Notificaciones genéricas',
+      summary:'Push y email sí, pero sin lógica fina (silencio temporal, escalamiento, batching).',
+      impact:'Usuarios desactivan notificaciones por ruido.',
+      signals:['"Recibo demasiados correos de PRAIA"'],
+      fix:'Centro de notificaciones con preferencias por evento.'},
+    {id:'O-04', sev:'med', title:'Gestión de equipos / permisos finos',
+      summary:'Security filters son potentes pero costosos de mantener; los roles son binarios.',
+      impact:'Onboarding de nuevos usuarios es manual y propenso a errores.',
+      signals:['"Le dimos acceso pero ve cosas que no debería"'],
+      fix:'RBAC granular + grupos + delegación.'},
+    {id:'O-05', sev:'low', title:'Sin API pública',
+      summary:'La API de AppSheet existe pero es limitada y poco documentada.',
+      impact:'Difícil que otros sistemas hablen con PRAIA en tiempo real.',
+      signals:['Integraciones por Sheet en vez de API'],
+      fix:'API REST/GraphQL propia con auth y rate limit.'},
+  ],
+};
+
+function renderGaps(){
+  for(const [section, list] of Object.entries(GAPS)){
+    const grid = document.querySelector(`[data-section="${section}"]`);
+    if(!grid) continue;
+    grid.innerHTML = list.map(g => `
+      <div class="gap" data-id="${g.id}">
+        <div class="gap-head">
+          <span class="gap-id">${g.id}</span>
+          <span class="sev ${g.sev}">${g.sev === 'high' ? 'crítico' : g.sev === 'med' ? 'medio' : 'bajo'}</span>
+        </div>
+        <h4>${g.title}</h4>
+        <p class="gap-summary">${g.summary}</p>
+        <div class="gap-detail">
+          <h5>Impacto</h5>
+          <p style="margin:0 0 8px">${g.impact}</p>
+          <h5>Señales en campo</h5>
+          <ul>${g.signals.map(s=>`<li>${s}</li>`).join('')}</ul>
+          <h5>Cómo se cierra</h5>
+          <p style="margin:0">${g.fix}</p>
+        </div>
+        <span class="chev" aria-hidden="true">›</span>
+      </div>
+    `).join('');
+  }
+  document.querySelectorAll('.gap').forEach(card=>{
+    card.addEventListener('click', ()=> card.classList.toggle('open'));
+  });
+}
+renderGaps();
+
+/* ───────── TOC scroll spy ───────── */
+const links = document.querySelectorAll('#toc-list a');
+const sections = [...document.querySelectorAll('section.s')];
+function spy(){
+  const y = window.scrollY + 120;
+  let active = sections[0]?.id;
+  for(const s of sections){
+    if(s.offsetTop <= y) active = s.id;
+  }
+  links.forEach(a=>{
+    const isActive = a.getAttribute('href') === '#' + active;
+    a.classList.toggle('active', isActive);
+  });
+}
+window.addEventListener('scroll', spy, {passive:true});
+window.addEventListener('load', spy);
+spy();
+</script>
+</body>
+</html>

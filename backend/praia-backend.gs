@@ -1,0 +1,353 @@
+/**
+ * PRAIA · Backend Apps Script
+ * ────────────────────────────────────────────────────────────────
+ * Pegar este código en: tu Sheet "Tickets" → Extensions → Apps Script
+ * Reemplazar el código por defecto. Guardar. Deploy → New deployment.
+ *
+ * Endpoints expuestos:
+ *   GET  ?action=tickets       → lista de tickets
+ *   GET  ?action=apartments    → catálogo de apartamentos
+ *   GET  ?action=agents        → equipo
+ *   GET  ?action=issues        → catálogo de problemas
+ *   GET  ?action=audit         → auditoría
+ *   GET  ?action=me            → datos del usuario actual
+ *
+ *   POST {action:'create',  ticket:{...}}
+ *   POST {action:'update',  id, patch:{...}}
+ *   POST {action:'delete',  id}
+ *   POST {action:'comment', id, comment:{...}}
+ *   POST {action:'bulk-status', ids:[...], value:'cerrado'}
+ *   POST {action:'bulk-assign', ids:[...], value:'luis'}
+ *
+ * Toda llamada (GET o POST) requiere ?email=usuario@dominio.com
+ * o {email:'...'} en el body. El email se valida contra la hoja Users.
+ */
+
+/* ════════════════════════ Config ════════════════════════ */
+const SHEETS = {
+  TICKETS: 'Tickets',
+  APTS:    'Apartments',
+  AGENTS:  'Agents',
+  USERS:   'Users',
+  AUDIT:   'Audit_Log',
+  ISSUES:  'Issues',
+  PLATFORMS: 'Platforms',
+};
+
+/* ════════════════════════ HTTP entry ════════════════════════ */
+function doGet(e) {
+  try {
+    const params = e.parameter || {};
+    const action = (params.action || 'tickets').toLowerCase();
+    const user = checkAuth_(params.email);
+    if (!user) return jsonOut_({ error: 'unauthorized', email: params.email || null });
+
+    switch (action) {
+      case 'tickets':    return jsonOut_({ data: readSheet_(SHEETS.TICKETS) });
+      case 'apartments': return jsonOut_({ data: readSheet_(SHEETS.APTS) });
+      case 'agents':     return jsonOut_({ data: readSheet_(SHEETS.AGENTS) });
+      case 'issues':     return jsonOut_({ data: readSheet_(SHEETS.ISSUES) });
+      case 'audit':      return jsonOut_({ data: readSheet_(SHEETS.AUDIT, 200) });
+      case 'me':         return jsonOut_({ data: user });
+      case 'all':        return jsonOut_({
+        data: {
+          tickets:    readSheet_(SHEETS.TICKETS),
+          apartments: readSheet_(SHEETS.APTS),
+          agents:     readSheet_(SHEETS.AGENTS),
+          issues:     readSheet_(SHEETS.ISSUES),
+          platforms:  readSheet_(SHEETS.PLATFORMS),
+          me: user,
+        }
+      });
+      default: return jsonOut_({ error: 'unknown action: ' + action });
+    }
+  } catch (err) {
+    return jsonOut_({ error: err.message, stack: err.stack });
+  }
+}
+
+function doPost(e) {
+  try {
+    const body = JSON.parse((e.postData && e.postData.contents) || '{}');
+    const action = (body.action || '').toLowerCase();
+    
+    // Login especial: no requiere email validado previamente
+    if (action === 'login') {
+      const email = body.email || '';
+      const password = body.password || '';
+      if (!email || !password) return jsonOut_({ error: 'email y password requeridos' });
+      
+      const users = readSheet_(SHEETS.USERS);
+      const user = users.find(u => (u.email || '').toLowerCase() === email.toLowerCase() && u.active !== false);
+      if (!user) return jsonOut_({ error: 'Email no autorizado o inactivo' });
+      
+      // Verificar contraseña (comparar hash)
+      const providedHash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password);
+      const providedHashStr = providedHash.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
+      const storedHash = user.password_hash || '';
+      
+      if (providedHashStr !== storedHash) {
+        return jsonOut_({ error: 'Contraseña incorrecta' });
+      }
+      
+      logAudit_({
+        id: user.id, email: user.email, name: user.name,
+        role: user.role || 'agent', shift: user.shift || ''
+      }, 'LOGIN', SHEETS.USERS, user.id, null, null);
+      
+      return jsonOut_({ data: {
+        id: user.id, email: user.email, name: user.name,
+        role: user.role || 'agent', shift: user.shift || '', 
+        access_level: user.access_level || 'user',
+        active: true
+      }});
+    }
+    
+    // Otras acciones requieren auth
+    const user = checkAuth_(body.email);
+    if (!user) return jsonOut_({ error: 'unauthorized', email: body.email || null });
+
+    switch (action) {
+      case 'create':       return jsonOut_({ data: createTicket_(body.ticket, user) });
+      case 'update':       return jsonOut_({ data: updateTicket_(body.id, body.patch, user) });
+      case 'delete':       return jsonOut_({ data: deleteTicket_(body.id, user) });
+      case 'comment':      return jsonOut_({ data: addComment_(body.id, body.comment, user) });
+      case 'bulk-status':  return jsonOut_({ data: bulkUpdate_(body.ids, { status: body.value }, user) });
+      case 'bulk-assign':  return jsonOut_({ data: bulkUpdate_(body.ids, { agent: body.value }, user) });
+      case 'bulk-delete':  return jsonOut_({ data: bulkDelete_(body.ids, user) });
+      default: return jsonOut_({ error: 'unknown action: ' + action });
+    }
+  } catch (err) {
+    return jsonOut_({ error: err.message, stack: err.stack });
+  }
+}
+
+/* ════════════════════════ Auth ════════════════════════ */
+function checkAuth_(email) {
+  if (!email) return null;
+  const users = readSheet_(SHEETS.USERS);
+  const u = users.find(r => (r.email || '').toLowerCase() === email.toLowerCase() && r.active !== false);
+  if (!u) return null;
+  return {
+    id: u.id, email: u.email, name: u.name,
+    role: u.role || 'agent', shift: u.shift || '',
+    access_level: u.access_level || 'user',
+    active: u.active !== false,
+  };
+}
+
+/* ════════════════════════ Sheet IO ════════════════════════ */
+function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
+
+function readSheet_(name, limit) {
+  const sheet = ss_().getSheetByName(name);
+  if (!sheet) throw new Error('Sheet not found: ' + name);
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  if (values.length < 2) return [];
+  const headers = values.shift().map(String);
+  let rows = values.map(r => {
+    const o = {};
+    headers.forEach((h, i) => { o[h] = r[i] === '' ? null : r[i]; });
+    return o;
+  }).filter(o => o.id != null && o.id !== '');
+  if (limit) rows = rows.slice(-limit).reverse();
+  return rows;
+}
+
+function appendRow_(name, obj) {
+  const sheet = ss_().getSheetByName(name);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const row = headers.map(h => obj[h] != null ? obj[h] : '');
+  sheet.appendRow(row);
+}
+
+function findRowIndex_(name, id) {
+  const sheet = ss_().getSheetByName(name);
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === String(id)) return i + 1; // sheet rows are 1-based
+  }
+  return -1;
+}
+
+function updateRow_(name, id, patch) {
+  const sheet = ss_().getSheetByName(name);
+  const rowIdx = findRowIndex_(name, id);
+  if (rowIdx < 0) throw new Error(name + ' row not found: ' + id);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const current = sheet.getRange(rowIdx, 1, 1, headers.length).getValues()[0];
+  const before = {}; headers.forEach((h, i) => before[h] = current[i]);
+  headers.forEach((h, i) => {
+    if (patch.hasOwnProperty(h)) current[i] = patch[h];
+  });
+  sheet.getRange(rowIdx, 1, 1, headers.length).setValues([current]);
+  const after = {}; headers.forEach((h, i) => after[h] = current[i]);
+  return { before, after };
+}
+
+function deleteRow_(name, id) {
+  const sheet = ss_().getSheetByName(name);
+  const rowIdx = findRowIndex_(name, id);
+  if (rowIdx < 0) throw new Error(name + ' row not found: ' + id);
+  const before = sheet.getRange(rowIdx, 1, 1, sheet.getLastColumn()).getValues()[0];
+  sheet.deleteRow(rowIdx);
+  return before;
+}
+
+/* ════════════════════════ Ticket ops ════════════════════════ */
+function createTicket_(t, user) {
+  if (!t || !t.apartment || !t.issue) throw new Error('ticket requires apartment and issue');
+  const id = t.id || nextTicketId_();
+  const now = new Date().toISOString();
+  const slaHours = t.priority === 'alta' ? 4 : t.priority === 'media' ? 12 : 24;
+  
+  // Asegurar que apartment es STRING puro (evitar que Sheets lo convierta a fecha)
+  const aptStr = String(t.apartment || '').trim();
+  
+  const ticket = {
+    id,
+    status:      String(t.status || 'abierto'),
+    priority:    String(t.priority || 'media'),
+    platform:    String(t.platform || 'phone'),
+    issue:       String(t.issue),
+    apartment:   ("'" + aptStr),  // Prefijo ' fuerza texto en Sheets
+    guest:       String(t.guest || ''),
+    agent:       String(t.agent || user.id),
+    description: String(t.description || ''),
+    createdAt:   now,
+    updatedAt:   now,
+    closedAt:    '',
+    slaDeadline: new Date(Date.now() + slaHours * 3600 * 1000).toISOString(),
+  };
+  appendRow_(SHEETS.TICKETS, ticket);
+  logAudit_(user, 'CREATE', SHEETS.TICKETS, id, null, ticket);
+  return ticket;
+}
+
+function updateTicket_(id, patch, user) {
+  if (!id || !patch) throw new Error('id and patch required');
+  patch.updatedAt = new Date().toISOString();
+  if (patch.status === 'cerrado' && !patch.closedAt) patch.closedAt = patch.updatedAt;
+  const { before, after } = updateRow_(SHEETS.TICKETS, id, patch);
+  logAudit_(user, 'UPDATE', SHEETS.TICKETS, id, diffOnly_(before, after), null);
+  return after;
+}
+
+function deleteTicket_(id, user) {
+  const before = deleteRow_(SHEETS.TICKETS, id);
+  logAudit_(user, 'DELETE', SHEETS.TICKETS, id, null, null);
+  return { id, deleted: true };
+}
+
+function addComment_(ticketId, comment, user) {
+  // Comments are stored as JSON rows in audit table for simplicity in this version.
+  // For production move them to their own Comments sheet.
+  const c = {
+    id:       comment.id || ('c-' + Date.now()),
+    ticketId, author: user.id, text: comment.text || '',
+    ts:       new Date().toISOString(),
+  };
+  logAudit_(user, 'COMMENT', SHEETS.TICKETS, ticketId, null, c);
+  // also touch ticket
+  updateRow_(SHEETS.TICKETS, ticketId, { updatedAt: c.ts });
+  return c;
+}
+
+function bulkUpdate_(ids, patch, user) {
+  if (!Array.isArray(ids)) throw new Error('ids must be an array');
+  const results = ids.map(id => updateTicket_(id, { ...patch }, user));
+  return { updated: results.length, patch };
+}
+
+function bulkDelete_(ids, user) {
+  if (!Array.isArray(ids)) throw new Error('ids must be an array');
+  ids.forEach(id => deleteTicket_(id, user));
+  return { deleted: ids.length };
+}
+
+/* ════════════════════════ Audit ════════════════════════ */
+function logAudit_(user, action, table, rowId, delta, payload) {
+  const entry = {
+    id:     Utilities.getUuid(),
+    ts:     new Date().toISOString(),
+    actor:  user.email,
+    actorName: user.name,
+    action,
+    table,
+    rowId:  String(rowId || ''),
+    delta:  delta ? JSON.stringify(delta) : '',
+    payload: payload ? JSON.stringify(payload) : '',
+  };
+  appendRow_(SHEETS.AUDIT, entry);
+}
+
+function diffOnly_(before, after) {
+  const out = {};
+  Object.keys(after).forEach(k => {
+    if (String(before[k]) !== String(after[k]) && k !== 'updatedAt') {
+      out[k] = { from: before[k], to: after[k] };
+    }
+  });
+  return out;
+}
+
+/* ════════════════════════ Helpers ════════════════════════ */
+function nextTicketId_() {
+  const sheet = ss_().getSheetByName(SHEETS.TICKETS);
+  const last = sheet.getLastRow();
+  if (last < 2) return 'TK-1001';
+  const ids = sheet.getRange(2, 1, last - 1, 1).getValues()
+    .map(r => String(r[0]))
+    .filter(id => id.startsWith('TK-'))
+    .map(id => parseInt(id.slice(3), 10))
+    .filter(n => !isNaN(n));
+  const next = (ids.length ? Math.max(...ids) : 1000) + 1;
+  return 'TK-' + next;
+}
+
+function jsonOut_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ════════════════════════ Setup helper ════════════════════════
+ * Ejecuta esta función UNA SOLA VEZ desde el editor de Apps Script
+ * (Selecciona "setupSheets" en el menú de funciones y dale Run).
+ * Crea las hojas que faltan con los headers correctos.
+ * Si una hoja ya existe, no la toca.
+ */
+function setupSheets() {
+  const schemas = {
+    [SHEETS.TICKETS]: ['id','status','priority','platform','issue','apartment','guest','agent','description','createdAt','updatedAt','closedAt','slaDeadline'],
+    [SHEETS.APTS]:    ['id','building','beds','baths','capacity','address','notes'],
+    [SHEETS.AGENTS]:  ['id','name','role','shift','color','active'],
+    [SHEETS.USERS]:   ['id','email','name','role','shift','active'],
+    [SHEETS.AUDIT]:   ['id','ts','actor','actorName','action','table','rowId','delta','payload'],
+  };
+  const ss = ss_();
+  Object.entries(schemas).forEach(([name, headers]) => {
+    let sheet = ss.getSheetByName(name);
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
+      sheet.appendRow(headers);
+      sheet.setFrozenRows(1);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#f3f4f6');
+    } else {
+      // Verify headers match (warn but don't override)
+      const current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+      Logger.log(name + ' existing headers: ' + JSON.stringify(current));
+    }
+  });
+  Logger.log('Setup complete. Verify each sheet has the right headers.');
+}
+
+/* ════════════════════════ Seed (opcional) ════════════════════════
+ * Crea un usuario admin inicial. Cámbialo por tu email antes de correr.
+ */
+function seedAdmin() {
+  const sheet = ss_().getSheetByName(SHEETS.USERS);
+  sheet.appendRow(['u-001', 'tu-email@tudominio.com', 'Tu Nombre', 'admin', 'Mañana', true]);
+  Logger.log('Admin seeded. Update email in seedAdmin() before running.');
+}
